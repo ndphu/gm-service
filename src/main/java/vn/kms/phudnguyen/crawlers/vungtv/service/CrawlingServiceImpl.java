@@ -2,6 +2,7 @@ package vn.kms.phudnguyen.crawlers.vungtv.service;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.logging.LogEntry;
 import org.openqa.selenium.logging.LogType;
@@ -12,7 +13,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import vn.kms.phudnguyen.crawlers.vungtv.entity.Episode;
 import vn.kms.phudnguyen.crawlers.vungtv.entity.Movie;
+import vn.kms.phudnguyen.crawlers.vungtv.repository.EpisodeRepository;
 import vn.kms.phudnguyen.crawlers.vungtv.repository.MovieRepository;
 
 import java.net.MalformedURLException;
@@ -29,6 +32,10 @@ public class CrawlingServiceImpl implements CrawlingService {
 
   @Autowired
   private MovieRepository movieRepository;
+
+  @Autowired
+  private EpisodeRepository episodeRepository;
+
   @Autowired
   private Gson gson;
   @Autowired
@@ -42,7 +49,7 @@ public class CrawlingServiceImpl implements CrawlingService {
   private WebDriver driver;
 
   @Override
-  public void craw() {
+  public void crawMovies() {
     if (isCrawling) {
       LOGGER.info("A crawling process is already running");
       return;
@@ -56,17 +63,62 @@ public class CrawlingServiceImpl implements CrawlingService {
         crawMovieSource(m);
       });
     } catch (Exception ex) {
-      LOGGER.warn("Fail to craw videos", ex);
+      LOGGER.warn("Fail to crawMovies videos", ex);
     } finally {
-      try {
-        if (driver != null) {
-          driver.close();
-          driver.quit();
-        }
-      } catch (Exception e) {
-        LOGGER.warn("Failed to close web driver", e);
-      }
+      closeDriver(this.driver);
       isCrawling = false;
+    }
+  }
+
+  private void closeDriver(WebDriver driver) {
+    try {
+      if (driver != null) {
+        driver.close();
+        driver.quit();
+      }
+    } catch (Exception e) {
+      LOGGER.warn("Failed to close web driver", e);
+    }
+  }
+
+  @Override
+  public void crawEpisodes() {
+    if (isCrawling) {
+      LOGGER.info("A crawling process is already running");
+      return;
+    }
+    isCrawling = true;
+    try {
+      driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
+      episodeRepository.findAll().forEach(ep -> {
+        LOGGER.info("Processing [{}] {}", ep.getId(), ep.getTitle());
+        crawEpisodeSource(ep);
+      });
+    } catch (Exception ex) {
+      LOGGER.warn("Fail to crawMovies videos", ex);
+    } finally {
+      closeDriver(this.driver);
+
+      isCrawling = false;
+    }
+  }
+
+  private void crawEpisodeSource(Episode ep) {
+    if (Objects.isNull(ep.getCrawUrl()) || ep.getCrawUrl().isEmpty()) {
+      LOGGER.info("Ignoring invalid episode {} without crawUrl", ep);
+      return;
+    }
+    if (Objects.isNull(ep.getVideoSource()) || ep.getVideoSource().isEmpty()) {
+      String source = getMovieSource(ep.getCrawUrl());
+      if (source != null) {
+        ep.setTitle(driver.findElement(By.cssSelector("h1.title-film-film-1")).getText());
+        ep.setSubTitle(driver.findElement(By.cssSelector("h2.title-film-film-2")).getText());
+        ep.setVideoSource(source);
+        LOGGER.info("Updating episode {}", ep.getId());
+        episodeRepository.save(ep);
+      }
+    } else {
+      LOGGER.info("Ignoring video which already had videoSource url");
     }
   }
 
