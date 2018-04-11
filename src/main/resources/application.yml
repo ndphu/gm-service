@@ -1,0 +1,28 @@
+spring:
+  data:
+    mongodb:
+      database: gm
+      host: 192.168.1.5
+      port: 5050
+
+crawler:
+  movie:
+    enabled: false
+  episode:
+    enabled: false
+
+
+webdriver:
+  remote:
+    url: http://192.168.1.2:4444/wd/hub
+
+spring:
+  application:
+    name: gm-crawling-service
+
+mqtt:
+  broker:
+    protocol: tcp
+    host: 192.168.1.5
+    port: 4433
+

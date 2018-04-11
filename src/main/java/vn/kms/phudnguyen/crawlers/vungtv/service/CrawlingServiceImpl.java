@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import vn.kms.phudnguyen.crawlers.vungtv.dto.CrawDTO;
 import vn.kms.phudnguyen.crawlers.vungtv.entity.Episode;
 import vn.kms.phudnguyen.crawlers.vungtv.entity.Movie;
 import vn.kms.phudnguyen.crawlers.vungtv.repository.EpisodeRepository;
@@ -46,7 +47,7 @@ public class CrawlingServiceImpl implements CrawlingService {
 
 
   private boolean isCrawling;
-  private WebDriver driver;
+  private RemoteWebDriver driver;
 
   @Override
   public void crawMovies() {
@@ -109,7 +110,7 @@ public class CrawlingServiceImpl implements CrawlingService {
       return;
     }
     if (Objects.isNull(ep.getVideoSource()) || ep.getVideoSource().isEmpty()) {
-      String source = getMovieSource(ep.getCrawUrl());
+      String source = getMovieSource(driver, ep.getCrawUrl());
       if (source != null) {
         ep.setTitle(driver.findElement(By.cssSelector("h1.title-film-film-1")).getText());
         ep.setSubTitle(driver.findElement(By.cssSelector("h2.title-film-film-2")).getText());
@@ -128,7 +129,7 @@ public class CrawlingServiceImpl implements CrawlingService {
       return;
     }
     if (Objects.isNull(m.getVideoSource()) || m.getVideoSource().isEmpty()) {
-      String source = getMovieSource(m.getPlayUrl());
+      String source = getMovieSource(driver, m.getPlayUrl());
       if (source != null) {
         m.setVideoSource(source);
         LOGGER.info("Updating video {}", m.getId());
@@ -140,7 +141,7 @@ public class CrawlingServiceImpl implements CrawlingService {
   }
 
   @Override
-  public String getMovieSource(String playUrl) {
+  public String getMovieSource(RemoteWebDriver driver, String playUrl) {
     driver.get(playUrl);
 
     List<LogEntry> entries = driver.manage().logs().get(LogType.PERFORMANCE).getAll();
@@ -164,6 +165,22 @@ public class CrawlingServiceImpl implements CrawlingService {
     LOGGER.info("Found urls: " + urls);
 
     return getSourceFromSet(urls);
+  }
+
+  @Override
+  public List<CrawDTO> crawVideoSource(List<CrawDTO> craws) throws MalformedURLException {
+    RemoteWebDriver driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
+
+    try {
+      craws.forEach(craw -> craw.setResult(this.getMovieSource(driver, craw.getInput())));
+    } catch (Exception ex) {
+      LOGGER.error("Fail to craw video", ex);
+    } finally {
+      driver.close();
+      driver.quit();
+    }
+
+    return craws;
   }
 
   private String getSourceFromSet(Set<String> urls) {
