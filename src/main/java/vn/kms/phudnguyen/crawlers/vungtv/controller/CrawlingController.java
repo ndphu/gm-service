@@ -4,17 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.kms.phudnguyen.crawlers.vungtv.dto.CrawDTO;
-import vn.kms.phudnguyen.crawlers.vungtv.dto.TaskStatus;
-import vn.kms.phudnguyen.crawlers.vungtv.dto.TaskType;
-import vn.kms.phudnguyen.crawlers.vungtv.entity.Task;
-import vn.kms.phudnguyen.crawlers.vungtv.repository.TaskRepository;
 import vn.kms.phudnguyen.crawlers.vungtv.service.CrawlingService;
 
 import java.net.MalformedURLException;
@@ -27,9 +21,6 @@ public class CrawlingController {
 
   @Autowired
   private CrawlingService crawlingService;
-
-  @Autowired
-  private TaskRepository taskRepository;
 
   @Autowired
   private Gson gson;
@@ -47,38 +38,4 @@ public class CrawlingController {
     }
     return crawlingService.crawVideoSource(dtos);
   }
-
-  @GetMapping("/movie/{id}")
-  public Task crawMovie(@PathVariable String id) {
-    Task task = Task.builder()
-        .status(TaskStatus.NOT_START)
-        .target(id)
-        .type(TaskType.CRAW_MOVIE)
-        .build();
-    taskRepository.save(task);
-    return task;
-  }
-
-  @GetMapping("/serie/{id}")
-  public Task crawSerie(@PathVariable String id) {
-    Task task = Task.builder()
-        .status(TaskStatus.NOT_START)
-        .target(id)
-        .type(TaskType.CRAW_SERIE)
-        .build();
-    taskRepository.save(task);
-    return task;
-  }
-
-  @GetMapping("/episode/{id}")
-  public Task crawEpisode(@PathVariable String id) {
-    Task task = Task.builder()
-        .status(TaskStatus.NOT_START)
-        .target(id)
-        .type(TaskType.CRAW_EPISODE)
-        .build();
-    taskRepository.save(task);
-    return task;
-  }
-
 }
