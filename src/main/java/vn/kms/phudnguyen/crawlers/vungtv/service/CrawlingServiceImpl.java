@@ -1,9 +1,9 @@
 package vn.kms.phudnguyen.crawlers.vungtv.service;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import org.openqa.selenium.By;
-import org.openqa.selenium.Keys;
+import org.apache.commons.io.IOUtils;
 import org.openqa.selenium.logging.LogEntry;
 import org.openqa.selenium.logging.LogType;
 import org.openqa.selenium.remote.DesiredCapabilities;
@@ -15,10 +15,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import vn.kms.phudnguyen.crawlers.vungtv.dto.CrawDTO;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -39,8 +44,10 @@ public class CrawlingServiceImpl implements CrawlingService {
   private String remoteDriverUrl;
 
   @Override
-  public String getMovieSource(RemoteWebDriver driver, String playUrl) {
+  public Map<String, String> getMovieSource(RemoteWebDriver driver, String playUrl) throws IOException {
+    Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
+    Set<String> srt = new HashSet<>();
     driver.manage().timeouts().pageLoadTimeout(15, TimeUnit.SECONDS);
     int tried = 1;
     while (tried < 6 && getSourceFromSet(urls) == null) {
@@ -50,12 +57,14 @@ public class CrawlingServiceImpl implements CrawlingService {
         }
       } catch (Exception ex) {
         LOGGER.info("timeout exceeded. tried = " + tried);
-        checkLog(driver, urls);
+        checkLog(driver, urls, srt);
         if (getSourceFromSet(urls) == null) {
           int retryNavigate = 1;
           while (retryNavigate < 3) {
             try {
+              LOGGER.info("trying to refresh browser");
               driver.navigate().refresh();
+              LOGGER.info("refresh successfully");
               break;
             } catch (Exception ignored) {
               LOGGER.warn("ignore refresh exception");
@@ -73,17 +82,19 @@ public class CrawlingServiceImpl implements CrawlingService {
         tried++;
       }
     }
-
-
     LOGGER.info("Found urls: " + urls);
-    return getSourceFromSet(urls);
+    result.put("source", getSourceFromSet(urls));
+    result.put("subTitle", srt.isEmpty() ? null: srt.stream().findFirst().orElse(null));
+    return result;
   }
 
-  private void checkLog(RemoteWebDriver driver, Set<String> urls) {
+  private void checkLog(RemoteWebDriver driver, Set<String> urls, Set<String> srt) throws IOException {
     List<LogEntry> entries = driver.manage().logs().get(LogType.PERFORMANCE).getAll();
-    LOGGER.info(entries.size() + " " + LogType.PERFORMANCE + " log entries found");
+
+    LOGGER.info("{} {} log entries found", entries.size(), LogType.PERFORMANCE);
     for (LogEntry entry : entries) {
-      JsonObject message = gson.fromJson(entry.getMessage(), JsonObject.class).getAsJsonObject("message");
+      JsonObject messageObject = gson.fromJson(entry.getMessage(), JsonObject.class);
+      JsonObject message = messageObject.getAsJsonObject("message");
       if (Objects.equals(message.get("method").getAsString(),
           "Network.responseReceived")) {
         String type = message
@@ -95,6 +106,15 @@ public class CrawlingServiceImpl implements CrawlingService {
               .getAsJsonObject("response")
               .get("url").getAsString());
         }
+        if (Objects.equals(type, "XHR")) {
+          String url = message
+              .getAsJsonObject("params")
+              .getAsJsonObject("response")
+              .get("url").getAsString();
+          if (url.startsWith("https://srtsub.vungtv.com")) {
+            srt.add(url);
+          }
+        }
       }
     }
   }
@@ -103,7 +123,15 @@ public class CrawlingServiceImpl implements CrawlingService {
   public List<CrawDTO> crawVideoSource(List<CrawDTO> craws) throws MalformedURLException {
     RemoteWebDriver driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
     try {
-      craws.forEach(craw -> craw.setResult(this.getMovieSource(driver, craw.getInput())));
+      craws.forEach(craw -> {
+        try {
+          Map<String, String> crawResult = this.getMovieSource(driver, craw.getInput());
+          craw.setResult(crawResult.get("source"));
+          craw.setSubTitle(crawResult.get("subTitle"));
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+      });
     } catch (Exception ex) {
       LOGGER.error("Fail to craw video", ex);
     } finally {

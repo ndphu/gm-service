@@ -9,4 +9,5 @@ public class CrawDTO {
   String id;
   String input;
   String result;
+  String subTitle;
 }
