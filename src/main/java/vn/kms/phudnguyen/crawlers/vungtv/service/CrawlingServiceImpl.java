@@ -48,12 +48,15 @@ public class CrawlingServiceImpl implements CrawlingService {
     Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
     Set<String> srt = new HashSet<>();
-    driver.manage().timeouts().pageLoadTimeout(15, TimeUnit.SECONDS);
+    driver.manage().timeouts().pageLoadTimeout(5, TimeUnit.SECONDS);
     int tried = 1;
     while (tried < 6 && getSourceFromSet(urls) == null) {
       try {
         if (tried == 1) {
+          LOGGER.info("driver.get started");
           driver.get(playUrl);
+          checkLog(driver, urls, srt);
+          LOGGER.info("driver.get finished");
         }
       } catch (Exception ex) {
         LOGGER.info("timeout exceeded. tried = " + tried);
