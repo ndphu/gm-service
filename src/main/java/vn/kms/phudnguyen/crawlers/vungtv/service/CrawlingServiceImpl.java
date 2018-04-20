@@ -1,9 +1,7 @@
 package vn.kms.phudnguyen.crawlers.vungtv.service;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import org.apache.commons.io.IOUtils;
 import org.openqa.selenium.logging.LogEntry;
 import org.openqa.selenium.logging.LogType;
 import org.openqa.selenium.remote.DesiredCapabilities;
@@ -15,8 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import vn.kms.phudnguyen.crawlers.vungtv.dto.CrawDTO;
 
-import java.io.File;
-import java.io.FileOutputStream;
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -27,9 +24,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import static java.lang.Thread.*;
+import static java.lang.Thread.sleep;
 
 @Service
 public class CrawlingServiceImpl implements CrawlingService {
@@ -37,24 +38,44 @@ public class CrawlingServiceImpl implements CrawlingService {
 
   @Autowired
   private Gson gson;
+
   @Autowired
   private DesiredCapabilities desiredCapabilities;
 
   @Value("${webdriver.remote.url}")
   private String remoteDriverUrl;
 
+  @Value("${webdriver.thread.count:4}")
+  private int threadCount;
+
+  private BlockingQueue<Integer> driverQueue = new LinkedBlockingQueue<>();
+
+  @PostConstruct
+  public void postConstruct() {
+    LOGGER.info("initializing remote drivers...");
+
+    for (int i = 0; i < threadCount; ++i) {
+      LOGGER.info("initializing driver {}", i);
+      driverQueue.add(1);
+      LOGGER.info("initialized driver {}", i);
+    }
+
+    LOGGER.info("finished");
+  }
+
   @Override
   public Map<String, String> getMovieSource(RemoteWebDriver driver, String playUrl) throws IOException {
     Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
     Set<String> srt = new HashSet<>();
-    driver.manage().timeouts().pageLoadTimeout(5, TimeUnit.SECONDS);
+    driver.manage().timeouts().pageLoadTimeout(30, TimeUnit.SECONDS);
     int tried = 1;
     while (tried < 6 && getSourceFromSet(urls) == null) {
       try {
         if (tried == 1) {
           LOGGER.info("driver.get started");
           driver.get(playUrl);
+          LOGGER.info("checking log...");
           checkLog(driver, urls, srt);
           LOGGER.info("driver.get finished");
         }
@@ -62,24 +83,8 @@ public class CrawlingServiceImpl implements CrawlingService {
         LOGGER.info("timeout exceeded. tried = " + tried);
         checkLog(driver, urls, srt);
         if (getSourceFromSet(urls) == null) {
-          int retryNavigate = 1;
-          while (retryNavigate < 3) {
-            try {
-              LOGGER.info("trying to refresh browser");
-              driver.navigate().refresh();
-              LOGGER.info("refresh successfully");
-              break;
-            } catch (Exception ignored) {
-              LOGGER.warn("ignore refresh exception");
-            } finally {
-              retryNavigate++;
-              try {
-                sleep(5000);
-              } catch (Exception ignored) {
-                LOGGER.warn("ignore thread interrupt exception");
-              }
-            }
-          }
+          retry(driver);
+          checkLog(driver, urls, srt);
         }
       } finally {
         tried++;
@@ -87,8 +92,70 @@ public class CrawlingServiceImpl implements CrawlingService {
     }
     LOGGER.info("Found urls: " + urls);
     result.put("source", getSourceFromSet(urls));
-    result.put("subTitle", srt.isEmpty() ? null: srt.stream().findFirst().orElse(null));
+    result.put("subTitle", srt.isEmpty() ? null : srt.stream().findFirst().orElse(null));
     return result;
+  }
+
+  @Override
+  public Map<String, String> crawVideoUrl(String original) throws Exception {
+    LOGGER.info("waiting for free executor...");
+    driverQueue.take();
+    RemoteWebDriver driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
+    LOGGER.info("got executor");
+    Map<String, String> result = new HashMap<>();
+    Set<String> urls = new HashSet<>();
+    Set<String> srt = new HashSet<>();
+    int tried = 1;
+    while (tried < 6 && getSourceFromSet(urls) == null) {
+      try {
+        LOGGER.info("driver.get started");
+        driver.get(original);
+        LOGGER.info("driver.get finished");
+        LOGGER.info("checking log...");
+        checkLog(driver, urls, srt);
+      } catch (Exception ex) {
+        LOGGER.info("timeout exceeded. tried = " + tried);
+        checkLog(driver, urls, srt);
+        if (getSourceFromSet(urls) == null) {
+          retry(driver);
+          checkLog(driver, urls, srt);
+        }
+      } finally {
+        tried++;
+      }
+    }
+    try {
+      driver.close();
+      driver.quit();
+    } catch (Exception ignored) {
+
+    }
+    driverQueue.add(1);
+    LOGGER.info("Found urls: " + urls);
+    result.put("source", getSourceFromSet(urls));
+    result.put("subTitle", srt.isEmpty() ? null : srt.stream().findFirst().orElse(null));
+    return result;
+  }
+
+  private void retry(RemoteWebDriver driver) {
+    int retryNavigate = 1;
+    while (retryNavigate < 3) {
+      try {
+        LOGGER.info("trying to refresh browser");
+        driver.navigate().refresh();
+        LOGGER.info("refresh successfully");
+        break;
+      } catch (Exception ignored) {
+        LOGGER.warn("ignore refresh exception");
+      } finally {
+        retryNavigate++;
+        try {
+          sleep(1000);
+        } catch (Exception ignored) {
+          LOGGER.warn("ignore thread interrupt exception");
+        }
+      }
+    }
   }
 
   private void checkLog(RemoteWebDriver driver, Set<String> urls, Set<String> srt) throws IOException {
@@ -143,6 +210,22 @@ public class CrawlingServiceImpl implements CrawlingService {
     }
 
     return craws;
+  }
+
+  @Override
+  public List<CrawDTO> crawVideoSourceWithPool(List<CrawDTO> crawDTOList) {
+    crawDTOList.forEach(craw -> {
+      try {
+        Map<String, String> crawResult = this.crawVideoUrl(craw.getInput());
+        craw.setResult(crawResult.get("source"));
+        craw.setSubTitle(crawResult.get("subTitle"));
+      } catch (Exception e) {
+        e.printStackTrace();
+        craw.setError(e.getMessage());
+      }
+    });
+
+    return crawDTOList;
   }
 
   private String getSourceFromSet(Set<String> urls) {

@@ -11,5 +11,9 @@ import java.util.Map;
 public interface CrawlingService {
   Map<String, String> getMovieSource(RemoteWebDriver driver, String original) throws IOException;
 
+  Map<String, String> crawVideoUrl(String original) throws Exception;
+
   List<CrawDTO> crawVideoSource(List<CrawDTO> crawList) throws MalformedURLException;
+
+  List<CrawDTO> crawVideoSourceWithPool(List<CrawDTO> crawDTOList) throws MalformedURLException;
 }

@@ -10,4 +10,7 @@ public class CrawDTO {
   String input;
   String result;
   String subTitle;
+  String timeout;
+  boolean headless;
+  String error;
 }
