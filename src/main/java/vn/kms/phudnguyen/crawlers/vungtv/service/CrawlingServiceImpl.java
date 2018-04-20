@@ -106,8 +106,16 @@ public class CrawlingServiceImpl implements CrawlingService {
     Set<String> urls = new HashSet<>();
     Set<String> srt = new HashSet<>();
     int tried = 1;
-    while (tried < 6 && getSourceFromSet(urls) == null) {
+    while (getSourceFromSet(urls) == null) {
       try {
+        if (tried > 6) {
+          break;
+        } else {
+          if (tried > 1) {
+            LOGGER.info("sleeping for waiting video ready");
+            Thread.sleep(10000);
+          }
+        }
         LOGGER.info("driver.get started");
         driver.get(original);
         LOGGER.info("driver.get finished");
@@ -160,7 +168,6 @@ public class CrawlingServiceImpl implements CrawlingService {
 
   private void checkLog(RemoteWebDriver driver, Set<String> urls, Set<String> srt) throws IOException {
     List<LogEntry> entries = driver.manage().logs().get(LogType.PERFORMANCE).getAll();
-
     LOGGER.info("{} {} log entries found", entries.size(), LogType.PERFORMANCE);
     for (LogEntry entry : entries) {
       JsonObject messageObject = gson.fromJson(entry.getMessage(), JsonObject.class);
