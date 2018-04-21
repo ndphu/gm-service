@@ -34,7 +34,9 @@ import static java.lang.Thread.sleep;
 
 @Service
 public class CrawlingServiceImpl implements CrawlingService {
+  public static final String BANHTV_COM = "banhtv.com";
   private static final Logger LOGGER = LoggerFactory.getLogger(CrawlingServiceImpl.class);
+  public static final String VUNG_TV = "vung.tv";
 
   @Autowired
   private Gson gson;
@@ -76,15 +78,15 @@ public class CrawlingServiceImpl implements CrawlingService {
           LOGGER.info("driver.get started");
           driver.get(playUrl);
           LOGGER.info("checking log...");
-          checkLog(driver, urls, srt);
+          checkLog(driver, urls, srt, getType(playUrl));
           LOGGER.info("driver.get finished");
         }
       } catch (Exception ex) {
         LOGGER.info("timeout exceeded. tried = " + tried);
-        checkLog(driver, urls, srt);
+        checkLog(driver, urls, srt, getType(playUrl));
         if (getSourceFromSet(urls) == null) {
           retry(driver);
-          checkLog(driver, urls, srt);
+          checkLog(driver, urls, srt, getType(playUrl));
         }
       } finally {
         tried++;
@@ -94,6 +96,16 @@ public class CrawlingServiceImpl implements CrawlingService {
     result.put("source", getSourceFromSet(urls));
     result.put("subTitle", srt.isEmpty() ? null : srt.stream().findFirst().orElse(null));
     return result;
+  }
+
+  private String getType(String url) {
+    if (url.contains(VUNG_TV)) {
+      return VUNG_TV;
+    } else if (url.contains(BANHTV_COM)) {
+      return BANHTV_COM;
+    }
+    return null;
+
   }
 
   @Override
@@ -120,13 +132,25 @@ public class CrawlingServiceImpl implements CrawlingService {
         driver.get(original);
         LOGGER.info("driver.get finished");
         LOGGER.info("checking log...");
-        checkLog(driver, urls, srt);
+        int checkCount = 0;
+        while (true) {
+          LOGGER.info("check time {}", checkCount);
+          checkCount++;
+          checkLog(driver, urls, srt, getType(original));
+          if (getSourceFromSet(urls) != null) {
+            break;
+          }
+          if (checkCount >= 12) {
+            break;
+          }
+          Thread.sleep(5000);
+        }
       } catch (Exception ex) {
         LOGGER.info("timeout exceeded. tried = " + tried);
-        checkLog(driver, urls, srt);
+        checkLog(driver, urls, srt, getType(original));
         if (getSourceFromSet(urls) == null) {
           retry(driver);
-          checkLog(driver, urls, srt);
+          checkLog(driver, urls, srt, getType(original));
         }
       } finally {
         tried++;
@@ -166,34 +190,58 @@ public class CrawlingServiceImpl implements CrawlingService {
     }
   }
 
-  private void checkLog(RemoteWebDriver driver, Set<String> urls, Set<String> srt) throws IOException {
+  private void checkLog(RemoteWebDriver driver, Set<String> urls, Set<String> srt, String type) throws IOException {
     List<LogEntry> entries = driver.manage().logs().get(LogType.PERFORMANCE).getAll();
     LOGGER.info("{} {} log entries found", entries.size(), LogType.PERFORMANCE);
-    for (LogEntry entry : entries) {
-      JsonObject messageObject = gson.fromJson(entry.getMessage(), JsonObject.class);
-      JsonObject message = messageObject.getAsJsonObject("message");
-      if (Objects.equals(message.get("method").getAsString(),
-          "Network.responseReceived")) {
-        String type = message
-            .getAsJsonObject("params")
-            .get("type").getAsString();
-        if (Objects.equals(type, "Media")) {
-          urls.add(message
-              .getAsJsonObject("params")
-              .getAsJsonObject("response")
-              .get("url").getAsString());
-        }
-        if (Objects.equals(type, "XHR")) {
-          String url = message
-              .getAsJsonObject("params")
-              .getAsJsonObject("response")
-              .get("url").getAsString();
-          if (url.startsWith("https://srtsub.vungtv.com")) {
-            srt.add(url);
+    switch (type) {
+      case VUNG_TV:
+        for (LogEntry entry : entries) {
+          JsonObject messageObject = gson.fromJson(entry.getMessage(), JsonObject.class);
+          JsonObject message = messageObject.getAsJsonObject("message");
+          if (Objects.equals(message.get("method").getAsString(), "Network.responseReceived")) {
+            String requestType = message
+                .getAsJsonObject("params")
+                .get("type").getAsString();
+            if (Objects.equals(requestType, "Media")) {
+              urls.add(message
+                  .getAsJsonObject("params")
+                  .getAsJsonObject("response")
+                  .get("url").getAsString());
+            }
+            if (Objects.equals(requestType, "XHR")) {
+              String url = message
+                  .getAsJsonObject("params")
+                  .getAsJsonObject("response")
+                  .get("url").getAsString();
+              if (url.startsWith("https://srtsub.vungtv.com")) {
+                srt.add(url);
+              }
+            }
           }
         }
-      }
+        break;
+      case BANHTV_COM:
+        for (LogEntry entry : entries) {
+          JsonObject messageObject = gson.fromJson(entry.getMessage(), JsonObject.class);
+          JsonObject message = messageObject.getAsJsonObject("message");
+          String method = message.get("method").getAsString();
+          if (Objects.equals(method, "Network.requestWillBeSent")) {
+            JsonObject params = message.get("params").getAsJsonObject();
+            if (params.has("redirectResponse")) {
+              String redirectUrl = params.get("redirectResponse").getAsJsonObject().get("url").getAsString();
+              JsonObject request = params.get("request").getAsJsonObject();
+              String requestUrl = request.get("url").getAsString();
+              if (redirectUrl.contains("api.banhtv.com") && requestUrl.contains("fbcdn.net")) {
+                urls.add(requestUrl);
+              }
+            }
+          }
+        }
+        break;
     }
+    //http://api.banhtv.com/getfb/play.php
+
+
   }
 
   @Override
@@ -238,7 +286,8 @@ public class CrawlingServiceImpl implements CrawlingService {
   private String getSourceFromSet(Set<String> urls) {
     Optional<String> source = urls.stream().filter(u -> {
       try {
-        return new URL(u).getHost().equals("storage.googleapis.com");
+        String host = new URL(u).getHost();
+        return (host.equals("storage.googleapis.com") || host.contains("fbcdn.net"));
       } catch (MalformedURLException e) {
         LOGGER.warn("Invalid video url {}", u);
         return false;

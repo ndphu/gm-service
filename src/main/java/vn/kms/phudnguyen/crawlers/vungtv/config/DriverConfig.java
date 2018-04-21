@@ -25,7 +25,7 @@ public class DriverConfig {
   DesiredCapabilities desiredCapabilities() {
     DesiredCapabilities caps = DesiredCapabilities.chrome();
     LoggingPreferences loggingPreferences = new LoggingPreferences();
-    loggingPreferences.enable(LogType.PERFORMANCE, Level.INFO);
+    loggingPreferences.enable(LogType.PERFORMANCE, Level.ALL);
     caps.setCapability(CapabilityType.LOGGING_PREFS, loggingPreferences);
 
     if (headless) {
