@@ -22,6 +22,7 @@ public class MQTTConfig {
   public MqttConnectOptions mqttConnectOptions() {
     MqttConnectOptions connOpts = new MqttConnectOptions();
     connOpts.setCleanSession(true);
+    connOpts.setKeepAliveInterval(36000);
     connOpts.setAutomaticReconnect(false);
 
     return connOpts;
