@@ -118,6 +118,7 @@ public class CrawlingServiceImpl implements CrawlingService {
     LOGGER.info("waiting for free executor...");
     driverQueue.take();
     RemoteWebDriver driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
+    driver.manage().addCookie(new Cookie("___cc", "VNM"));
     LOGGER.info("got executor");
     Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
