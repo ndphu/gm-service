@@ -54,7 +54,12 @@ public class MessageBrokerImpl implements MessageBroker, MqttCallback, Applicati
 
   @Override
   public void connectionLost(Throwable cause) {
-
+    LOGGER.info("Connection lost to broker {}", cause);
+    try {
+      checkConnection();
+    } catch (MqttException e) {
+      e.printStackTrace();
+    }
   }
 
   @Override

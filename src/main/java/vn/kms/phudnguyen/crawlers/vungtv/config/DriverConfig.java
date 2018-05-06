@@ -18,7 +18,7 @@ public class DriverConfig {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(DriverConfig.class);
 
-  @Value("${webdriver.config.headless.enabled:false}")
+  @Value("${crawler.headless.enabled:false}")
   private boolean headless;
 
   @Bean

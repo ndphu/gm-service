@@ -3,6 +3,10 @@ crawler:
     enabled: false
   episode:
     enabled: false
+  mqtt:
+    enabled: false
+  headless:
+    enabled: false
 
 
 webdriver:
