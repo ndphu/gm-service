@@ -2,6 +2,7 @@ package vn.kms.phudnguyen.crawlers.vungtv.service;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import org.openqa.selenium.Cookie;
 import org.openqa.selenium.logging.LogEntry;
 import org.openqa.selenium.logging.LogType;
 import org.openqa.selenium.remote.DesiredCapabilities;
@@ -50,6 +51,9 @@ public class CrawlingServiceImpl implements CrawlingService {
   @Value("${webdriver.thread.count:4}")
   private int threadCount;
 
+  @Value("${webdriver.cookie}")
+  private String cookie;
+
   private BlockingQueue<Integer> driverQueue = new LinkedBlockingQueue<>();
 
   @PostConstruct
@@ -70,6 +74,7 @@ public class CrawlingServiceImpl implements CrawlingService {
     Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
     Set<String> srt = new HashSet<>();
+    driver.manage().addCookie(new Cookie("___cc", "VNM"));
     driver.manage().timeouts().pageLoadTimeout(30, TimeUnit.SECONDS);
     int tried = 1;
     while (tried < 6 && getSourceFromSet(urls) == null) {

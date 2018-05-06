@@ -10,6 +10,7 @@ crawler:
 
 
 webdriver:
+  cookie: ___cc=VNM;
   remote:
     url: http://192.168.40.133:4444/wd/hub
 
