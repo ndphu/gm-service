@@ -1,8 +1,4 @@
 crawler:
-  movie:
-    enabled: false
-  episode:
-    enabled: false
   mqtt:
     enabled: false
   headless:

@@ -117,8 +117,8 @@ public class CrawlingServiceImpl implements CrawlingService {
   public Map<String, String> crawVideoUrl(String original) throws Exception {
     LOGGER.info("waiting for free executor...");
     driverQueue.take();
+    LOGGER.info("got executor. starting chrome {}", remoteDriverUrl);
     RemoteWebDriver driver = new RemoteWebDriver(new URL(remoteDriverUrl), desiredCapabilities);
-    LOGGER.info("got executor");
     Map<String, String> result = new HashMap<>();
     Set<String> urls = new HashSet<>();
     Set<String> srt = new HashSet<>();
@@ -133,9 +133,10 @@ public class CrawlingServiceImpl implements CrawlingService {
             Thread.sleep(10000);
           }
         }
-        LOGGER.info("driver.get started");
+        LOGGER.info("driver.get started for url {}", original);
         driver.get(original);
         if (Objects.equals("Are you with me?",driver.getTitle())) {
+          LOGGER.info("facing blocking page, trying to set cookie");
           driver.manage().addCookie(new Cookie("___cc", "VNM"));
           driver.get(original);
         }
@@ -149,10 +150,10 @@ public class CrawlingServiceImpl implements CrawlingService {
           if (getSourceFromSet(urls) != null) {
             break;
           }
-          if (checkCount >= 12) {
+          if (checkCount >= 60) {
             break;
           }
-          Thread.sleep(5000);
+          Thread.sleep(1000);
         }
       } catch (Exception ex) {
         LOGGER.info("timeout exceeded. tried = " + tried);
